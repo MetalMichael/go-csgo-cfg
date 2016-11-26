@@ -1,3 +1,5 @@
+# go-csgo-cfg
+
 Based Heavily on [go-ini](https://github.com/go-ini/ini)
 
 Package ini provides INI file read and write functionality in Go.
