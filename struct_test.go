@@ -12,11 +12,10 @@
 // License for the specific language governing permissions and limitations
 // under the License.
 
-package ini
+package csgo_cfg
 
 import (
 	"bytes"
-	"fmt"
 	"strings"
 	"testing"
 	"time"
@@ -24,62 +23,40 @@ import (
 	. "github.com/smartystreets/goconvey/convey"
 )
 
-type testNested struct {
-	Cities      []string `delim:"|"`
-	Visits      []time.Time
-	Years       []int
-	Numbers     []int64
-	Ages        []uint
-	Populations []uint64
-	Coordinates []float64
-	Note        string
-	Unused      int `ini:"-"`
-}
-
-type testEmbeded struct {
-	GPA float64
-}
-
 type testStruct struct {
-	Name         string `ini:"NAME"`
+	Name         string `csgo:"NAME"`
 	Age          int
 	Male         bool
 	Money        float64
 	Born         time.Time
-	Time         time.Duration `ini:"Duration"`
-	Others       testNested
-	*testEmbeded `ini:"grade"`
-	Unused       int `ini:"-"`
+	Time         time.Duration `csgo:"Duration"`
+	Unused       int `csgo:"-"`
 	Unsigned     uint
-	Omitted      bool `ini:"omitthis,omitempty"`
+	Omitted      bool `csgo:"omitthis,omitempty"`
 }
 
 const _CONF_DATA_STRUCT = `
-NAME = Unknwon
-Age = 21
-Male = true
-Money = 1.25
-Born = 1993-10-07T20:17:05Z
-Duration = 2h45m
-Unsigned = 3
-omitthis = true
+NAME Unknwon
+Age 21
+Male true
+Money 1.25
+Born 1993-10-07T20:17:05Z
+Duration 2h45m
+Unsigned 3
+omitthis true
+Cities "HangZhou|Boston"
+Visits "1993-10-07T20:17:05Z, 1993-10-07T20:17:05Z"
+Years "1993,1994"
+Numbers "10010,10086"
+Ages "18,19"
+Populations "12345678,98765432"
+Coordinates "192.168,10.11"
+Note "Hello world"
 
-[Others]
-Cities = HangZhou|Boston
-Visits = 1993-10-07T20:17:05Z, 1993-10-07T20:17:05Z
-Years = 1993,1994
-Numbers = 10010,10086
-Ages = 18,19
-Populations = 12345678,98765432
-Coordinates = 192.168,10.11
-Note = Hello world!
+GPA 2.8
 
-[grade]
-GPA = 2.8
-
-[foo.bar]
-Here = there
-When = then
+Here "there"
+When "then"
 `
 
 type unsupport struct {
@@ -97,7 +74,7 @@ type unsupport3 struct {
 }
 
 type unsupport4 struct {
-	*unsupport3 `ini:"Others"`
+	*unsupport3 `csgo:"Others"`
 }
 
 type defaultValue struct {
@@ -114,12 +91,12 @@ type fooBar struct {
 }
 
 const _INVALID_DATA_CONF_STRUCT = `
-Name = 
-Age = age
-Male = 123
-Money = money
-Born = nil
-Cities = 
+Name 
+Age age
+Male 123
+Money money
+Born nil
+Cities 
 `
 
 func Test_Struct(t *testing.T) {
@@ -141,16 +118,6 @@ func Test_Struct(t *testing.T) {
 			dur, err := time.ParseDuration("2h45m")
 			So(err, ShouldBeNil)
 			So(ts.Time.Seconds(), ShouldEqual, dur.Seconds())
-
-			So(strings.Join(ts.Others.Cities, ","), ShouldEqual, "HangZhou,Boston")
-			So(ts.Others.Visits[0].String(), ShouldEqual, t.String())
-			So(fmt.Sprint(ts.Others.Years), ShouldEqual, "[1993 1994]")
-			So(fmt.Sprint(ts.Others.Numbers), ShouldEqual, "[10010 10086]")
-			So(fmt.Sprint(ts.Others.Ages), ShouldEqual, "[18 19]")
-			So(fmt.Sprint(ts.Others.Populations), ShouldEqual, "[12345678 98765432]")
-			So(fmt.Sprint(ts.Others.Coordinates), ShouldEqual, "[192.168 10.11]")
-			So(ts.Others.Note, ShouldEqual, "Hello world!")
-			So(ts.testEmbeded.GPA, ShouldEqual, 2.8)
 		})
 
 		Convey("Map section to struct", func() {
@@ -158,7 +125,7 @@ func Test_Struct(t *testing.T) {
 			f, err := Load([]byte(_CONF_DATA_STRUCT))
 			So(err, ShouldBeNil)
 
-			So(f.Section("foo.bar").MapTo(foobar), ShouldBeNil)
+			So(f.Section("").MapTo(foobar), ShouldBeNil)
 			So(foobar.Here, ShouldEqual, "there")
 			So(foobar.When, ShouldEqual, "then")
 		})
@@ -183,8 +150,8 @@ func Test_Struct(t *testing.T) {
 				return raw
 			}
 			So(cfg.MapTo(&unsupport{}), ShouldNotBeNil)
-			So(cfg.MapTo(&unsupport2{}), ShouldNotBeNil)
-			So(cfg.MapTo(&unsupport4{}), ShouldNotBeNil)
+			//So(cfg.MapTo(&unsupport2{}), ShouldNotBeNil)
+			//So(cfg.MapTo(&unsupport4{}), ShouldNotBeNil)
 		})
 
 		Convey("Map to omitempty field", func() {
@@ -216,64 +183,34 @@ func Test_Struct(t *testing.T) {
 	})
 
 	Convey("Reflect from struct", t, func() {
-		type Embeded struct {
-			Dates       []time.Time `delim:"|"`
-			Places      []string
-			Years       []int
-			Numbers     []int64
-			Ages        []uint
-			Populations []uint64
-			Coordinates []float64
-			None        []int
-		}
 		type Author struct {
-			Name      string `ini:"NAME"`
+			Name      string `csgo:"NAME"`
 			Male      bool
 			Age       int
 			Height    uint
 			GPA       float64
 			Date      time.Time
-			NeverMind string `ini:"-"`
-			*Embeded  `ini:"infos"`
+			NeverMind string `csgo:"-"`
 		}
 
 		t, err := time.Parse(time.RFC3339, "1993-10-07T20:17:05Z")
 		So(err, ShouldBeNil)
-		a := &Author{"Unknwon", true, 21, 100, 2.8, t, "",
-			&Embeded{
-				[]time.Time{t, t},
-				[]string{"HangZhou", "Boston"},
-				[]int{1993, 1994},
-				[]int64{10010, 10086},
-				[]uint{18, 19},
-				[]uint64{12345678, 98765432},
-				[]float64{192.168, 10.11},
-				[]int{},
-			}}
+		a := &Author{"Unknwon", true, 21, 100, 2.8, t, ""}
 		cfg := Empty()
 		So(ReflectFrom(cfg, a), ShouldBeNil)
 
 		var buf bytes.Buffer
 		_, err = cfg.WriteTo(&buf)
 		So(err, ShouldBeNil)
-		So(buf.String(), ShouldEqual, `NAME   = Unknwon
-Male   = true
-Age    = 21
-Height = 100
-GPA    = 2.8
-Date   = 1993-10-07T20:17:05Z
 
-[infos]
-Dates       = 1993-10-07T20:17:05Z|1993-10-07T20:17:05Z
-Places      = HangZhou,Boston
-Years       = 1993,1994
-Numbers     = 10010,10086
-Ages        = 18,19
-Populations = 12345678,98765432
-Coordinates = 192.168,10.11
-None        = 
+		So(buf.String(), ShouldEqual,
+            "NAME   Unknwon" + LineBreak +
+            "Male   true" + LineBreak +
+            "Age    21" + LineBreak +
+            "Height 100" + LineBreak +
+            "GPA    2.8" + LineBreak +
+            "Date   1993-10-07T20:17:05Z" + LineBreak)
 
-`)
 
 		Convey("Reflect from non-point struct", func() {
 			So(ReflectFrom(cfg, Author{}), ShouldNotBeNil)
@@ -282,23 +219,22 @@ None        =
 		Convey("Reflect from struct with omitempty", func() {
 			cfg := Empty()
 			type SpecialStruct struct {
-				FirstName  string    `ini:"first_name"`
-				LastName   string    `ini:"last_name"`
-				JustOmitMe string    `ini:"omitempty"`
-				LastLogin  time.Time `ini:"last_login,omitempty"`
-				LastLogin2 time.Time `ini:",omitempty"`
-				NotEmpty   int       `ini:"omitempty"`
+				FirstName  string    `csgo:"first_name"`
+				LastName   string    `csgo:"last_name"`
+				JustOmitMe string    `csgo:"omitempty"`
+				LastLogin  time.Time `csgo:"last_login,omitempty"`
+				LastLogin2 time.Time `csgo:",omitempty"`
+				NotEmpty   int       `csgo:"omitempty"`
 			}
 
 			So(ReflectFrom(cfg, &SpecialStruct{FirstName: "John", LastName: "Doe", NotEmpty: 9}), ShouldBeNil)
 
 			var buf bytes.Buffer
 			_, err = cfg.WriteTo(&buf)
-			So(buf.String(), ShouldEqual, `first_name = John
-last_name  = Doe
-omitempty  = 9
-
-`)
+			So(buf.String(), ShouldEqual, 
+            "first_name John" + LineBreak +
+            "last_name  Doe" + LineBreak +
+            "omitempty  9" + LineBreak)
 		})
 	})
 }
@@ -309,15 +245,15 @@ type testMapper struct {
 
 func Test_NameGetter(t *testing.T) {
 	Convey("Test name mappers", t, func() {
-		So(MapToWithMapper(&testMapper{}, TitleUnderscore, []byte("packag_name=ini")), ShouldBeNil)
+		So(MapToWithMapper(&testMapper{}, TitleUnderscore, []byte("package_name cfg")), ShouldBeNil)
 
-		cfg, err := Load([]byte("PACKAGE_NAME=ini"))
+		cfg, err := Load([]byte("PACKAGE_NAME cfg"))
 		So(err, ShouldBeNil)
 		So(cfg, ShouldNotBeNil)
 
 		cfg.NameMapper = AllCapsUnderscore
 		tg := new(testMapper)
 		So(cfg.MapTo(tg), ShouldBeNil)
-		So(tg.PackageName, ShouldEqual, "ini")
+		So(tg.PackageName, ShouldEqual, "cfg")
 	})
 }

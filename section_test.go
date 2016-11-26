@@ -12,7 +12,7 @@
 // License for the specific language governing permissions and limitations
 // under the License.
 
-package ini
+package csgo_cfg
 
 import (
 	"strings"
@@ -23,17 +23,17 @@ import (
 
 func Test_Section(t *testing.T) {
 	Convey("Test CRD sections", t, func() {
-		cfg, err := Load([]byte(_CONF_DATA), "testdata/conf.ini")
+		cfg, err := Load([]byte(_CONF_DATA), "testdata/conf.cfg")
 		So(err, ShouldBeNil)
 		So(cfg, ShouldNotBeNil)
 
 		Convey("Get section strings", func() {
-			So(strings.Join(cfg.SectionStrings(), ","), ShouldEqual, "DEFAULT,author,package,package.sub,features,types,array,note,comments,advance")
+			So(strings.Join(cfg.SectionStrings(), ","), ShouldEqual, "DEFAULT")
 		})
 
 		Convey("Delete a section", func() {
 			cfg.DeleteSection("")
-			So(cfg.SectionStrings()[0], ShouldNotEqual, DEFAULT_SECTION)
+			So(len(cfg.SectionStrings()), ShouldEqual, 0)
 		})
 
 		Convey("Create new sections", func() {

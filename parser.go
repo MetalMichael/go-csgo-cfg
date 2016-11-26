@@ -12,14 +12,13 @@
 // License for the specific language governing permissions and limitations
 // under the License.
 
-package ini
+package csgo_cfg
 
 import (
 	"bufio"
 	"bytes"
 	"fmt"
 	"io"
-	"strconv"
 	"strings"
 	"unicode"
 )
@@ -85,89 +84,12 @@ func cleanComment(in []byte) ([]byte, bool) {
 func readKeyName(in []byte) (string, int, error) {
 	line := string(in)
 
-	// Check if key name surrounded by quotes.
-	var keyQuote string
-	if line[0] == '"' {
-		if len(line) > 6 && string(line[0:3]) == `"""` {
-			keyQuote = `"""`
-		} else {
-			keyQuote = `"`
-		}
-	} else if line[0] == '`' {
-		keyQuote = "`"
-	}
-
 	// Get out key name
-	endIdx := -1
-	if len(keyQuote) > 0 {
-		startIdx := len(keyQuote)
-		// FIXME: fail case -> """"""name"""=value
-		pos := strings.Index(line[startIdx:], keyQuote)
-		if pos == -1 {
-			return "", -1, fmt.Errorf("missing closing key quote: %s", line)
-		}
-		pos += startIdx
-
-		// Find key-value delimiter
-		i := strings.IndexAny(line[pos+startIdx:], "=:")
-		if i < 0 {
-			return "", -1, ErrDelimiterNotFound{line}
-		}
-		endIdx = pos + i
-		return strings.TrimSpace(line[startIdx:pos]), endIdx + startIdx + 1, nil
-	}
-
-	endIdx = strings.IndexAny(line, "=:")
+	endIdx := strings.Index(line, " ")
 	if endIdx < 0 {
 		return "", -1, ErrDelimiterNotFound{line}
 	}
 	return strings.TrimSpace(line[0:endIdx]), endIdx + 1, nil
-}
-
-func (p *parser) readMultilines(line, val, valQuote string) (string, error) {
-	for {
-		data, err := p.readUntil('\n')
-		if err != nil {
-			return "", err
-		}
-		next := string(data)
-
-		pos := strings.LastIndex(next, valQuote)
-		if pos > -1 {
-			val += next[:pos]
-
-			comment, has := cleanComment([]byte(next[pos:]))
-			if has {
-				p.comment.Write(bytes.TrimSpace(comment))
-			}
-			break
-		}
-		val += next
-		if p.isEOF {
-			return "", fmt.Errorf("missing closing key quote from '%s' to '%s'", line, next)
-		}
-	}
-	return val, nil
-}
-
-func (p *parser) readContinuationLines(val string) (string, error) {
-	for {
-		data, err := p.readUntil('\n')
-		if err != nil {
-			return "", err
-		}
-		next := strings.TrimSpace(string(data))
-
-		if len(next) == 0 {
-			break
-		}
-		val += next
-		if val[len(val)-1] != '\\' {
-			break
-		}
-		val = val[:len(val)-1]
-	}
-	return val, nil
 }
 
 // hasSurroundedQuote check if and only if the first and last characters
@@ -178,50 +100,47 @@ func hasSurroundedQuote(in string, quote byte) bool {
 		strings.IndexByte(in[1:], quote) == len(in)-2
 }
 
-func (p *parser) readValue(in []byte, ignoreContinuation bool) (string, error) {
+// value, isString, comment, error
+func (p *parser) readValue(in []byte) (string, bool, string, error) {
 	line := strings.TrimLeftFunc(string(in), unicode.IsSpace)
-	if len(line) == 0 {
-		return "", nil
+
+	// Line empty, or nothing before the comment
+	if len(line) == 0 || (len(line) > 1 && line[0:1] == "//") {
+		return "", true, "", nil
 	}
 
-	var valQuote string
-	if len(line) > 3 && string(line[0:3]) == `"""` {
-		valQuote = `"""`
-	} else if line[0] == '`' {
-		valQuote = "`"
-	}
-
-	if len(valQuote) > 0 {
-		startIdx := len(valQuote)
-		pos := strings.LastIndex(line[startIdx:], valQuote)
-		// Check for multi-line value
-		if pos == -1 {
-			return p.readMultilines(line, line[startIdx:], valQuote)
+	// Drop everything after space, unless space is within a string
+	var valueEndIndex int
+	insideQuote := false
+	for _, c := range line {
+		if c == ' ' && !insideQuote {
+			break
 		}
-
-		return line[startIdx : pos+startIdx], nil
+		if c == '"' {
+			insideQuote = !insideQuote
+		}
+		valueEndIndex++
 	}
 
-	// Won't be able to reach here if value only contains whitespace.
-	line = strings.TrimSpace(line)
-
-	// Check continuation lines when desired.
-	if !ignoreContinuation && line[len(line)-1] == '\\' {
-		return p.readContinuationLines(line[:len(line)-1])
+	// Ended the string without matching quote. Invalid
+	if insideQuote {
+		return "", false, "", ErrDelimiterNotFound{line}
 	}
 
-	i := strings.IndexAny(line, "#;")
-	if i > -1 {
-		p.comment.WriteString(line[i:])
-		line = strings.TrimSpace(line[:i])
+	// Remove
+	valueLine := strings.TrimSpace(line[:valueEndIndex])
+    comment := ""
+    if len(in) > valueEndIndex {
+        comment = line[valueEndIndex:]
+    }    
+
+	if hasSurroundedQuote(valueLine, '\'') ||
+		hasSurroundedQuote(valueLine, '"') {
+		return valueLine[1 : len(valueLine)-1], true, comment, nil
 	}
 
-	// Trim single quotes
-	if hasSurroundedQuote(line, '\'') ||
-		hasSurroundedQuote(line, '"') {
-		line = line[1 : len(line)-1]
-	}
-	return line, nil
+	// Should be a number at this point
+	return valueLine, false, comment, nil
 }
 
 // parse parses data through an io.Reader.
@@ -231,7 +150,6 @@ func (f *File) parse(reader io.Reader) (err error) {
 		return fmt.Errorf("BOM: %v", err)
 	}
 
-	// Ignore error because default section name is never empty string.
 	section, _ := f.NewSection(DEFAULT_SECTION)
 
 	var line []byte
@@ -246,80 +164,29 @@ func (f *File) parse(reader io.Reader) (err error) {
 			continue
 		}
 
-		// Comments
-		if line[0] == '#' || line[0] == ';' {
-			// Note: we do not care ending line break,
-			// it is needed for adding second line,
-			// so just clean it once at the end when set to value.
-			p.comment.Write(line)
-			continue
-		}
-
-		// Section
-		if line[0] == '[' {
-			// Read to the next ']' (TODO: support quoted strings)
-			// TODO(unknwon): use LastIndexByte when stop supporting Go1.4
-			closeIdx := bytes.LastIndex(line, []byte("]"))
-			if closeIdx == -1 {
-				return fmt.Errorf("unclosed section: %s", line)
-			}
-
-			name := string(line[1:closeIdx])
-			section, err = f.NewSection(name)
-			if err != nil {
-				return err
-			}
-
-			comment, has := cleanComment(line[closeIdx+1:])
-			if has {
-				p.comment.Write(comment)
-			}
-
-			section.Comment = strings.TrimSpace(p.comment.String())
-
-			// Reset aotu-counter and comments
-			p.comment.Reset()
-			p.count = 1
-			continue
-		}
-
 		kname, offset, err := readKeyName(line)
 		if err != nil {
-			// Treat as boolean key when desired, and whole line is key name.
-			if IsErrDelimiterNotFound(err) && f.options.AllowBooleanKeys {
-				key, err := section.NewKey(string(line), "true")
-				if err != nil {
-					return err
-				}
-				key.isBooleanType = true
-				key.Comment = strings.TrimSpace(p.comment.String())
-				p.comment.Reset()
-				continue
-			}
 			return err
-		}
-
-		// Auto increment.
-		isAutoIncr := false
-		if kname == "-" {
-			isAutoIncr = true
-			kname = "#" + strconv.Itoa(p.count)
-			p.count++
 		}
 
 		key, err := section.NewKey(kname, "")
 		if err != nil {
 			return err
 		}
-		key.isAutoIncrement = isAutoIncr
 
-		value, err := p.readValue(line[offset:], f.options.IgnoreContinuation)
+		value, isString, comment, err := p.readValue(line[offset:])
 		if err != nil {
 			return err
 		}
+
 		key.SetValue(value)
-		key.Comment = strings.TrimSpace(p.comment.String())
-		p.comment.Reset()
+		key.isString = isString
+
+		// Comments
+        comment = strings.TrimLeftFunc(comment, unicode.IsSpace)
+		if len(comment) > 1 && comment[0:2] == "//" {
+			key.Comment = strings.TrimSpace(comment)
+		}
 	}
 	return nil
 }

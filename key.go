@@ -12,7 +12,7 @@
 // License for the specific language governing permissions and limitations
 // under the License.
 
-package ini
+package csgo_cfg
 
 import (
 	"fmt"
@@ -23,11 +23,10 @@ import (
 
 // Key represents a key under a section.
 type Key struct {
-	s               *Section
-	name            string
-	value           string
-	isAutoIncrement bool
-	isBooleanType   bool
+	s        *Section
+	name     string
+	value    string
+	isString bool
 
 	Comment string
 }

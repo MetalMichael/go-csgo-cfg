@@ -12,7 +12,7 @@
 // License for the specific language governing permissions and limitations
 // under the License.
 
-package ini
+package csgo_cfg
 
 import (
 	"bytes"
@@ -24,7 +24,7 @@ import (
 	"unicode"
 )
 
-// NameMapper represents a ini tag name mapper.
+// NameMapper represents a cfg tag name mapper.
 type NameMapper func(string) string
 
 // Built-in name getters.
@@ -204,13 +204,14 @@ func (s *Section) mapTo(val reflect.Value) error {
 		field := val.Field(i)
 		tpField := typ.Field(i)
 
-		tag := tpField.Tag.Get("ini")
+		tag := tpField.Tag.Get("csgo")
 		if tag == "-" {
 			continue
 		}
 
 		opts := strings.SplitN(tag, ",", 2) // strip off possible omitempty
 		fieldName := s.parseFieldName(tpField.Name, opts[0])
+
 		if len(fieldName) == 0 || !field.CanSet() {
 			continue
 		}
@@ -243,6 +244,7 @@ func (s *Section) mapTo(val reflect.Value) error {
 func (s *Section) MapTo(v interface{}) error {
 	typ := reflect.TypeOf(v)
 	val := reflect.ValueOf(v)
+    
 	if typ.Kind() == reflect.Ptr {
 		typ = typ.Elem()
 		val = val.Elem()
@@ -358,7 +360,7 @@ func (s *Section) reflectFrom(val reflect.Value) error {
 		field := val.Field(i)
 		tpField := typ.Field(i)
 
-		tag := tpField.Tag.Get("ini")
+		tag := tpField.Tag.Get("csgo")
 		if tag == "-" {
 			continue
 		}
@@ -419,7 +421,7 @@ func (f *File) ReflectFrom(v interface{}) error {
 	return f.Section("").ReflectFrom(v)
 }
 
-// ReflectFrom reflects data sources from given struct with name mapper.
+// ReflectFromWithMapper reflects data sources from given struct with name mapper.
 func ReflectFromWithMapper(cfg *File, v interface{}, mapper NameMapper) error {
 	cfg.NameMapper = mapper
 	return cfg.ReflectFrom(v)
