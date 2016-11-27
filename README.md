@@ -2,7 +2,7 @@
 
 Based Heavily on [go-ini](https://github.com/go-ini/ini)
 
-Package ini provides INI file read and write functionality in Go.
+Package go-csgo-cfg provides CS:GO .cfg file read and write functionality in Go.
 
 ## Example Config format
 
